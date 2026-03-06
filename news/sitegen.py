@@ -1,20 +1,46 @@
 from __future__ import annotations
 
 import html
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
 from .cache import Cache, ArticleRow
 
+
 def generate_offline_site(cache: Cache, *, lang: str, categories: List[str]) -> Path:
     site = cache.site_dir
-    (site / "articles").mkdir(parents=True, exist_ok=True)
+    assets_dir = site / "assets"
+    articles_dir = site / "articles"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    articles_dir.mkdir(parents=True, exist_ok=True)
     rows = cache.list_articles(lang=lang, categories=categories, search="", limit=3000)
+
+    asset_map: Dict[str, str] = {}
+
+    def asset_for(path_str: str) -> str:
+        if not path_str:
+            return ""
+        src = Path(path_str)
+        if not src.exists():
+            return ""
+        if path_str in asset_map:
+            return asset_map[path_str]
+        safe_name = f"{len(asset_map)+1}_{src.name}"
+        dest = assets_dir / safe_name
+        shutil.copy2(src, dest)
+        rel = f"assets/{safe_name}"
+        asset_map[path_str] = rel
+        return rel
 
     for row in rows:
         content = cache.get_article_html(row.id)
-        (site / "articles" / f"{row.id}.html").write_text(content, encoding="utf-8")
+        thumb_rel = asset_for(row.thumbnail_path)
+        if thumb_rel:
+            content = content.replace(row.thumbnail_path, f"../{thumb_rel}")
+            content = content.replace(Path(row.thumbnail_path).as_uri(), f"../{thumb_rel}")
+        (articles_dir / f"{row.id}.html").write_text(content, encoding="utf-8")
 
     by_cat: Dict[str, List[ArticleRow]] = {}
     for row in rows:
@@ -24,14 +50,20 @@ def generate_offline_site(cache: Cache, *, lang: str, categories: List[str]) -> 
         title = html.escape(row.title)
         source = html.escape(row.source)
         stamp = html.escape((row.published or row.fetched_at)[:19].replace("T", " "))
+        thumb_rel = asset_for(row.thumbnail_path)
+        media = ""
+        if thumb_rel:
+            media = f"<div class='thumb'><img src='{thumb_rel}' alt=''></div>"
         return (
             "<article class='card'>"
+            f"{media}"
+            "<div class='card-body'>"
             f"<a class='title' href='articles/{row.id}.html'>{title}</a>"
             f"<div class='small'>{source} · {stamp}</div>"
+            "</div>"
             "</article>"
         )
 
-    # category pages
     links = []
     for category, items in sorted(by_cat.items(), key=lambda x: x[0]):
         links.append(f"<a class='pill' href='{html.escape(category)}.html'>{html.escape(category)}</a>")
@@ -65,6 +97,7 @@ def generate_offline_site(cache: Cache, *, lang: str, categories: List[str]) -> 
     (site / "index.html").write_text(_wrap("NewsCleanroom Offline", body), encoding="utf-8")
     return site / "index.html"
 
+
 def _wrap(title: str, body: str) -> str:
     css = """
 :root { color-scheme: dark; }
@@ -79,6 +112,7 @@ body {
 }
 a { color: #8bb4ff; text-decoration: none; }
 a:hover { text-decoration: underline; }
+img { display:block; max-width:100%; }
 .topbar {
   position: sticky;
   top: 0;
@@ -97,14 +131,17 @@ h2 { margin: 28px 0 14px 0; font-size: 20px; }
   border: 1px solid rgba(255,255,255,.11);
   background: rgba(255,255,255,.04);
 }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .card {
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 16px;
-  padding: 14px;
+  border-radius: 18px;
+  overflow: hidden;
   background: rgba(255,255,255,.03);
   box-shadow: 0 14px 40px rgba(0,0,0,.26);
 }
+.thumb { aspect-ratio: 16 / 9; background: #131a25; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.card-body { padding: 14px; }
 .card .title {
   display: block;
   font-weight: 600;

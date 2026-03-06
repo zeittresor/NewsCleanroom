@@ -4,7 +4,7 @@ import webbrowser
 from pathlib import Path
 from typing import Dict, List
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -45,85 +45,14 @@ from .settings import AppSettings, load_settings, save_settings
 from .sitegen import generate_offline_site
 
 CATEGORY_LABELS = {
-    "de": {
-        "national": "[{country}]",
-        "world": "Welt",
-        "business": "Wirtschaft",
-        "ai": "Künstliche Intelligenz",
-        "entertainment": "Unterhaltung",
-        "sports": "Sport",
-        "it": "IT",
-        "science": "Wissen",
-        "politics": "Politik",
-        "health": "Gesundheit",
-        "custom": "Eigenes",
-    },
-    "fr": {
-        "national": "[{country}]",
-        "world": "Monde",
-        "business": "Économie",
-        "ai": "IA",
-        "entertainment": "Divertissement",
-        "sports": "Sport",
-        "it": "Informatique",
-        "science": "Science",
-        "politics": "Politique",
-        "health": "Santé",
-        "custom": "Personnalisé",
-    },
-    "es": {
-        "national": "[{country}]",
-        "world": "Mundo",
-        "business": "Economía",
-        "ai": "IA",
-        "entertainment": "Entretenimiento",
-        "sports": "Deportes",
-        "it": "TI",
-        "science": "Ciencia",
-        "politics": "Política",
-        "health": "Salud",
-        "custom": "Personalizado",
-    },
-    "uk": {
-        "national": "[{country}]",
-        "world": "Світ",
-        "business": "Економіка",
-        "ai": "ШІ",
-        "entertainment": "Розваги",
-        "sports": "Спорт",
-        "it": "ІТ",
-        "science": "Наука",
-        "politics": "Політика",
-        "health": "Здоров’я",
-        "custom": "Власне",
-    },
-    "ru": {
-        "national": "[{country}]",
-        "world": "Мир",
-        "business": "Экономика",
-        "ai": "ИИ",
-        "entertainment": "Развлечения",
-        "sports": "Спорт",
-        "it": "ИТ",
-        "science": "Наука",
-        "politics": "Политика",
-        "health": "Здоровье",
-        "custom": "Своё",
-    },
-    "zh-Hans": {
-        "national": "[{country}]",
-        "world": "全球",
-        "business": "经济",
-        "ai": "人工智能",
-        "entertainment": "娱乐",
-        "sports": "体育",
-        "it": "IT",
-        "science": "科学",
-        "politics": "政治",
-        "health": "健康",
-        "custom": "自定义",
-    },
+    "de": {"national": "[{country}]", "world": "Welt", "business": "Wirtschaft", "ai": "Künstliche Intelligenz", "entertainment": "Unterhaltung", "sports": "Sport", "it": "IT", "science": "Wissen", "politics": "Politik", "health": "Gesundheit", "custom": "Eigenes"},
+    "fr": {"national": "[{country}]", "world": "Monde", "business": "Économie", "ai": "IA", "entertainment": "Divertissement", "sports": "Sport", "it": "Informatique", "science": "Science", "politics": "Politique", "health": "Santé", "custom": "Personnalisé"},
+    "es": {"national": "[{country}]", "world": "Mundo", "business": "Economía", "ai": "IA", "entertainment": "Entretenimiento", "sports": "Deportes", "it": "TI", "science": "Ciencia", "politics": "Política", "health": "Salud", "custom": "Personalizado"},
+    "uk": {"national": "[{country}]", "world": "Світ", "business": "Економіка", "ai": "ШІ", "entertainment": "Розваги", "sports": "Спорт", "it": "ІТ", "science": "Наука", "politics": "Політика", "health": "Здоров’я", "custom": "Власне"},
+    "ru": {"national": "[{country}]", "world": "Мир", "business": "Экономика", "ai": "ИИ", "entertainment": "Развлечения", "sports": "Спорт", "it": "ИТ", "science": "Наука", "politics": "Политика", "health": "Здоровье", "custom": "Своё"},
+    "zh-Hans": {"national": "[{country}]", "world": "全球", "business": "经济", "ai": "人工智能", "entertainment": "娱乐", "sports": "体育", "it": "IT", "science": "科学", "politics": "政治", "health": "健康", "custom": "自定义"},
 }
+
 
 class CrawlThread(QThread):
     log = pyqtSignal(str)
@@ -141,6 +70,7 @@ class CrawlThread(QThread):
             self.done.emit({"ok": True, **result})
         except Exception as exc:
             self.done.emit({"ok": False, "error": str(exc)})
+
 
 class SettingsDialog(QDialog):
     def __init__(self, lang: str, settings_path: Path, settings: AppSettings, parent=None):
@@ -215,6 +145,7 @@ class SettingsDialog(QDialog):
         save_settings(self.settings_path, self.settings)
         super().accept()
 
+
 class MainWindow(QMainWindow):
     def __init__(self, cache: Cache, cache_dir: Path):
         super().__init__()
@@ -226,11 +157,14 @@ class MainWindow(QMainWindow):
         self.country_iso2 = get_default_country(self.lang)
         self._rows = []
         self._current_url = ""
+        self._current_article_id = None
+        self._offline_index_path: Path | None = None
         self.setWindowTitle("NewsCleanroom")
-        self.resize(1400, 900)
+        self.resize(1600, 980)
         self._build_ui()
         self._apply_i18n()
         self._reload_articles()
+        self._show_placeholder()
 
     def _build_ui(self):
         root = QWidget()
@@ -266,10 +200,12 @@ class MainWindow(QMainWindow):
         self.btn_update = QPushButton()
         self.btn_generate = QPushButton()
         self.btn_open_site = QPushButton()
+        self.btn_open_site_internal = QPushButton()
         self.btn_settings = QPushButton()
         self.btn_update.clicked.connect(self._on_update)
         self.btn_generate.clicked.connect(self._on_generate_site)
         self.btn_open_site.clicked.connect(self._on_open_site)
+        self.btn_open_site_internal.clicked.connect(self._on_open_site_internal)
         self.btn_settings.clicked.connect(self._on_settings)
 
         top_layout.addWidget(self.lbl_lang, 0, 0)
@@ -282,7 +218,8 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.btn_update, 1, 4)
         top_layout.addWidget(self.btn_generate, 1, 5)
         top_layout.addWidget(self.btn_open_site, 1, 6)
-        top_layout.addWidget(self.btn_settings, 1, 7)
+        top_layout.addWidget(self.btn_open_site_internal, 1, 7)
+        top_layout.addWidget(self.btn_settings, 1, 8)
 
         outer.addWidget(top_panel)
 
@@ -295,8 +232,7 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(10)
 
         self.cat_group = QGroupBox()
-        cat_group = self.cat_group
-        cat_group_layout = QVBoxLayout(cat_group)
+        cat_group_layout = QVBoxLayout(self.cat_group)
         self.category_checks: Dict[str, QCheckBox] = {}
         for key, _label in CATEGORIES:
             cb = QCheckBox()
@@ -307,12 +243,11 @@ class MainWindow(QMainWindow):
         cat_group_layout.addStretch(1)
         cat_scroll = QScrollArea()
         cat_scroll.setWidgetResizable(True)
-        cat_scroll.setWidget(cat_group)
+        cat_scroll.setWidget(self.cat_group)
         left_layout.addWidget(cat_scroll, 2)
 
         self.table_group = QGroupBox()
-        table_group = self.table_group
-        table_layout = QVBoxLayout(table_group)
+        table_layout = QVBoxLayout(self.table_group)
         self.table = QTableWidget(0, 4)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -321,16 +256,15 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemSelectionChanged.connect(self._on_table_select)
         table_layout.addWidget(self.table)
-        left_layout.addWidget(table_group, 5)
+        left_layout.addWidget(self.table_group, 5)
 
         self.log_group = QGroupBox()
-        log_group = self.log_group
-        log_layout = QVBoxLayout(log_group)
+        log_layout = QVBoxLayout(self.log_group)
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setMinimumHeight(150)
         log_layout.addWidget(self.log_box)
-        left_layout.addWidget(log_group, 2)
+        left_layout.addWidget(self.log_group, 2)
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
@@ -348,7 +282,9 @@ class MainWindow(QMainWindow):
         right_layout.addLayout(action_row)
 
         self.viewer = QTextBrowser()
-        self.viewer.setOpenExternalLinks(True)
+        self.viewer.setOpenLinks(False)
+        self.viewer.setOpenExternalLinks(False)
+        self.viewer.anchorClicked.connect(self._on_viewer_link_clicked)
         right_layout.addWidget(self.viewer, 1)
 
         splitter.addWidget(left)
@@ -371,6 +307,7 @@ class MainWindow(QMainWindow):
         self.btn_update.setText(t(self.lang, "update"))
         self.btn_generate.setText(t(self.lang, "generate_site"))
         self.btn_open_site.setText(t(self.lang, "open_site"))
+        self.btn_open_site_internal.setText(t(self.lang, "open_site_internal"))
         self.btn_settings.setText(t(self.lang, "settings"))
         self.btn_open_original.setText(t(self.lang, "open_original"))
         self.btn_copy_url.setText(t(self.lang, "copy_url"))
@@ -399,12 +336,25 @@ class MainWindow(QMainWindow):
     def _append_log(self, text: str):
         self.log_box.append(text)
 
+    def _show_placeholder(self):
+        html = (
+            "<html><body style='background:#0c1017;color:#dbe6ff;font-family:Segoe UI,Arial,sans-serif;'>"
+            "<div style='max-width:740px;margin:60px auto;padding:24px;border:1px solid rgba(255,255,255,.08);"
+            "border-radius:18px;background:rgba(255,255,255,.03)'>"
+            f"<h2 style='margin-top:0'>{t(self.lang, 'app_title')}</h2>"
+            f"<p>{t(self.lang, 'viewer_placeholder')}</p>"
+            "</div></body></html>"
+        )
+        self.viewer.setHtml(html)
+
     def _on_lang_changed(self):
         self.lang = self.cmb_lang.currentData()
         if self.cmb_country.currentData() == "AUTO":
             self.country_iso2 = get_default_country(self.lang)
         self._apply_i18n()
         self._reload_articles()
+        if self.table.currentRow() < 0:
+            self._show_placeholder()
 
     def _on_country_changed(self):
         value = self.cmb_country.currentData()
@@ -433,9 +383,10 @@ class MainWindow(QMainWindow):
     def _on_table_select(self):
         row = self.table.currentRow()
         if row < 0 or row >= len(self._rows):
-            self.viewer.setHtml(f"<html><body><p>{t(self.lang, 'no_article')}</p></body></html>")
+            self._show_placeholder()
             return
         article = self._rows[row]
+        self._current_article_id = article.id
         self._current_url = article.url
         self.viewer.setHtml(self.cache.get_article_html(article.id))
 
@@ -488,17 +439,34 @@ class MainWindow(QMainWindow):
     def _on_generate_site(self):
         try:
             index = generate_offline_site(self.cache, lang=self.lang, categories=self._selected_categories())
+            self._offline_index_path = index
         except Exception as exc:
             QMessageBox.critical(self, t(self.lang, "generate_site"), str(exc))
             return
         QMessageBox.information(self, t(self.lang, "generate_site"), str(index))
 
-    def _on_open_site(self):
+    def _ensure_site_index(self) -> Path | None:
         index = self.cache.site_dir / "index.html"
         if not index.exists():
-            QMessageBox.warning(self, t(self.lang, "open_site"), t(self.lang, "site_empty"))
+            try:
+                index = generate_offline_site(self.cache, lang=self.lang, categories=self._selected_categories())
+                self._offline_index_path = index
+            except Exception as exc:
+                QMessageBox.critical(self, t(self.lang, "generate_site"), str(exc))
+                return None
+        return index
+
+    def _on_open_site(self):
+        index = self._ensure_site_index()
+        if not index:
             return
         webbrowser.open(index.as_uri())
+
+    def _on_open_site_internal(self):
+        index = self._ensure_site_index()
+        if not index:
+            return
+        self.viewer.setSource(QUrl.fromLocalFile(str(index)))
 
     def _on_settings(self):
         dialog = SettingsDialog(self.lang, self.settings_path, self.settings, self)
@@ -512,3 +480,9 @@ class MainWindow(QMainWindow):
     def _copy_url(self):
         if self._current_url:
             QApplication.clipboard().setText(self._current_url)
+
+    def _on_viewer_link_clicked(self, url: QUrl):
+        if url.scheme() in {"http", "https"}:
+            webbrowser.open(url.toString())
+            return
+        self.viewer.setSource(url)
