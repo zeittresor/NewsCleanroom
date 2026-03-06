@@ -9,13 +9,32 @@ from typing import Dict, List
 from .cache import Cache, ArticleRow
 
 
-def generate_offline_site(cache: Cache, *, lang: str, categories: List[str]) -> Path:
+CATEGORY_LABELS = {
+    "de": {"national": "[{country}]", "world": "Welt", "business": "Wirtschaft", "ai": "Künstliche Intelligenz", "entertainment": "Unterhaltung", "sports": "Sport", "it": "IT", "science": "Wissen", "politics": "Politik", "health": "Gesundheit", "custom": "Eigenes"},
+    "fr": {"national": "[{country}]", "world": "Monde", "business": "Économie", "ai": "IA", "entertainment": "Divertissement", "sports": "Sport", "it": "Informatique", "science": "Science", "politics": "Politique", "health": "Santé", "custom": "Personnalisé"},
+    "es": {"national": "[{country}]", "world": "Mundo", "business": "Economía", "ai": "IA", "entertainment": "Entretenimiento", "sports": "Deporte", "it": "TI", "science": "Ciencia", "politics": "Política", "health": "Salud", "custom": "Personalizado"},
+    "uk": {"national": "[{country}]", "world": "Світ", "business": "Економіка", "ai": "ШІ", "entertainment": "Розваги", "sports": "Спорт", "it": "ІТ", "science": "Наука", "politics": "Політика", "health": "Здоров'я", "custom": "Власне"},
+    "ru": {"national": "[{country}]", "world": "Мир", "business": "Экономика", "ai": "ИИ", "entertainment": "Развлечения", "sports": "Спорт", "it": "ИТ", "science": "Наука", "politics": "Политика", "health": "Здоровье", "custom": "Своё"},
+    "zh-Hans": {"national": "[{country}]", "world": "全球", "business": "经济", "ai": "人工智能", "entertainment": "娱乐", "sports": "体育", "it": "IT", "science": "科学", "politics": "政治", "health": "健康", "custom": "自定义"},
+    "en": {"national": "[{country}]", "world": "World", "business": "Business", "ai": "Artificial Intelligence", "entertainment": "Entertainment", "sports": "Sports", "it": "IT", "science": "Science", "politics": "Politics", "health": "Health", "custom": "Custom"},
+}
+
+
+def category_label(lang: str, category: str, country_iso2: str = "") -> str:
+    label = CATEGORY_LABELS.get(lang, CATEGORY_LABELS["en"]).get(category, category)
+    if "{country}" in label:
+        label = label.format(country=country_iso2 or "")
+    return label
+
+
+def generate_offline_site(cache: Cache, *, lang: str, categories: List[str], country_iso2: str = "") -> Path:
     site = cache.site_dir
     assets_dir = site / "assets"
     articles_dir = site / "articles"
     assets_dir.mkdir(parents=True, exist_ok=True)
     articles_dir.mkdir(parents=True, exist_ok=True)
-    rows = cache.list_articles(lang=lang, categories=categories, search="", limit=3000)
+    selected_categories = list(dict.fromkeys(categories))
+    rows = cache.list_articles(lang=lang, categories=selected_categories, search="", limit=3000)
 
     asset_map: Dict[str, str] = {}
 
@@ -54,22 +73,26 @@ def generate_offline_site(cache: Cache, *, lang: str, categories: List[str]) -> 
         media = ""
         if thumb_rel:
             media = f"<div class='thumb'><img src='{thumb_rel}' alt=''></div>"
+        cat_name = html.escape(category_label(lang, row.category, country_iso2))
         return (
             "<article class='card'>"
             f"{media}"
             "<div class='card-body'>"
             f"<a class='title' href='articles/{row.id}.html'>{title}</a>"
             f"<div class='small'>{source} · {stamp}</div>"
+            f"<div class='small small-tag'>{cat_name}</div>"
             "</div>"
             "</article>"
         )
 
     links = []
-    for category, items in sorted(by_cat.items(), key=lambda x: x[0]):
-        links.append(f"<a class='pill' href='{html.escape(category)}.html'>{html.escape(category)}</a>")
+    for category in selected_categories:
+        items = by_cat.get(category, [])
+        label = category_label(lang, category, country_iso2)
+        links.append(f"<a class='pill' href='{html.escape(category)}.html'>{html.escape(label)}</a>")
         body = (
             "<div class='topbar'><div class='wrap'>"
-            f"<h1>{html.escape(category)}</h1>"
+            f"<h1>{html.escape(label)}</h1>"
             f"<div class='meta'>{len(items)} articles</div>"
             "<div class='pills'><a class='pill' href='index.html'>Back</a></div>"
             "</div></div><div class='wrap'>"
@@ -77,9 +100,9 @@ def generate_offline_site(cache: Cache, *, lang: str, categories: List[str]) -> 
         if items:
             body += "<div class='grid'>" + "".join(card(item) for item in items[:1000]) + "</div>"
         else:
-            body += "<div class='empty'>No articles available.</div>"
+            body += "<div class='empty'>No articles available in this category yet.</div>"
         body += "</div>"
-        (site / f"{category}.html").write_text(_wrap(category, body), encoding="utf-8")
+        (site / f"{category}.html").write_text(_wrap(label, body), encoding="utf-8")
 
     generated = datetime.now().isoformat(timespec="seconds")
     body = (
@@ -105,63 +128,79 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   margin: 0;
   background:
-    radial-gradient(1100px 520px at 15% 0%, rgba(90,120,255,.18), transparent 60%),
-    radial-gradient(800px 440px at 85% 10%, rgba(86,214,164,.10), transparent 55%),
-    #0c1017;
-  color: #e7ebf3;
+    radial-gradient(1200px 600px at 20% 0%, rgba(122,162,255,0.16), transparent 60%),
+    radial-gradient(900px 500px at 80% 10%, rgba(64,180,255,0.10), transparent 55%),
+    #08101b;
+  color: #eef4ff;
 }
-a { color: #8bb4ff; text-decoration: none; }
+a { color: #9bc1ff; text-decoration: none; }
 a:hover { text-decoration: underline; }
-img { display:block; max-width:100%; }
 .topbar {
-  position: sticky;
-  top: 0;
-  backdrop-filter: blur(12px);
-  background: rgba(12,16,23,.72);
-  border-bottom: 1px solid rgba(255,255,255,.07);
+  position: sticky; top: 0;
+  backdrop-filter: blur(10px);
+  background: rgba(8,16,27,0.72);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 14px 18px;
+  z-index: 2;
 }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 18px 22px; }
-h1 { margin: 0; font-size: 28px; }
-h2 { margin: 28px 0 14px 0; font-size: 20px; }
-.meta { margin-top: 8px; opacity: .78; font-size: 12px; }
-.pills { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 10px 0; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 18px 22px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 18px; margin: 12px 0 14px; }
+.meta { font-size: 12px; opacity: 0.75; margin-top: 6px; }
+.pills { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 20px; }
 .pill {
-  padding: 9px 13px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.11);
-  background: rgba(255,255,255,.04);
+  background: rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
 .card {
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 18px;
+  background: rgba(255,255,255,0.03);
   overflow: hidden;
-  background: rgba(255,255,255,.03);
-  box-shadow: 0 14px 40px rgba(0,0,0,.26);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.24);
 }
-.thumb { aspect-ratio: 16 / 9; background: #131a25; }
-.thumb img { width: 100%; height: 100%; object-fit: cover; }
-.card-body { padding: 14px; }
-.card .title {
+.thumb {
+  aspect-ratio: 16 / 9;
+  background: #0a1320;
+  overflow: hidden;
+}
+.thumb img {
   display: block;
-  font-weight: 600;
-  line-height: 1.35;
-  margin-bottom: 10px;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.card .small { font-size: 12px; opacity: .76; }
+.card-body { padding: 12px 14px 14px; }
+.title {
+  display: block;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  margin-bottom: 8px;
+  color: #eef4ff;
+}
+.small { font-size: 12px; opacity: 0.78; }
+.small-tag { margin-top: 6px; color: #b7ccff; }
 .empty {
-  border: 1px dashed rgba(255,255,255,.18);
-  border-radius: 16px;
-  padding: 20px;
-  background: rgba(255,255,255,.02);
+  border: 1px dashed rgba(255,255,255,0.18);
+  border-radius: 14px;
+  padding: 18px;
+  background: rgba(255,255,255,0.02);
 }
 """
     return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{html.escape(title)}</title>"
-        f"<style>{css}</style>"
-        "</head><body>"
-        f"{body}"
-        "</body></html>"
+        "<!doctype html>\n"
+        "<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>\n"
+        "<title>" + html.escape(title) + "</title>\n"
+        "<style>\n" + css + "\n</style>\n"
+        "</head><body>\n" + body + "\n</body></html>"
     )

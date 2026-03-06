@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
 PAYWALL_MARKERS = [
@@ -14,6 +14,18 @@ PAYWALL_MARKERS = [
     "подпис", "только для подписчиков",
     "订阅", "付费", "會員", "会员",
 ]
+
+FREE_ACCESS_DOMAIN_ALLOWLIST = {
+    "tagesschau.de",
+    "ard.de",
+    "zdf.de",
+    "dw.com",
+    "deutschlandfunk.de",
+    "deutschlandfunkkultur.de",
+    "bbc.com",
+    "bbc.co.uk",
+    "npr.org",
+}
 
 TRASH_HINTS = [
     "cookie", "consent", "newsletter", "promo", "advert", "banner", "social", "share",
@@ -124,6 +136,16 @@ def extract_article(url: str, html: str, fallback_title: str, fallback_summary: 
                 node.decompose()
             except Exception:
                 pass
+
+    # Avoid showing the same lead image twice.
+    if hero_src:
+        first_media = container.find(["figure", "picture", "img"])
+        if first_media is not None:
+            try:
+                first_media.decompose()
+            except Exception:
+                pass
+
     content_html = str(container)
     text = BeautifulSoup(content_html, "lxml").get_text("\n", strip=True)
     compact = re.sub(r"\s+", " ", text).strip()
@@ -143,7 +165,6 @@ def extract_article(url: str, html: str, fallback_title: str, fallback_summary: 
         lead_image_url=lead_image_url,
     )
 
-
 def wrap_summary(title: str, url: str, summary_html: str, hero_src: str = "") -> str:
     return _wrap_article(title, url, summary_html, hero_src=hero_src)
 
@@ -151,7 +172,7 @@ def wrap_summary(title: str, url: str, summary_html: str, hero_src: str = "") ->
 def _wrap_article(title: str, url: str, body_html: str, hero_src: str = "") -> str:
     safe_title = title.replace("<", "&lt;").replace(">", "&gt;")
     hero = ""
-    if hero_src:
+    if hero_src and "<img" not in body_html.lower():
         hero = (
             "<figure class='hero'>"
             f"<img src='{hero_src}' alt=''>"

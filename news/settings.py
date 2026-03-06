@@ -12,6 +12,7 @@ class AppSettings:
     max_items_per_feed: int = 15
     request_timeout_sec: int = 12
     per_domain_delay_ms: int = 600
+    history_days: int = 7
 
     def __post_init__(self):
         if self.custom_feeds is None:
@@ -28,6 +29,7 @@ def load_settings(path: Path) -> AppSettings:
             max_items_per_feed=int(data.get("max_items_per_feed", 15)),
             request_timeout_sec=int(data.get("request_timeout_sec", 12)),
             per_domain_delay_ms=int(data.get("per_domain_delay_ms", 600)),
+            history_days=max(1, min(31, int(data.get("history_days", 7)))),
         )
     except Exception:
         return AppSettings()

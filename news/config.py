@@ -72,6 +72,8 @@ CATEGORY_FEEDS: Dict[str, Dict[str, List[str]]] = {
         "it": [
             "https://feeds.bbci.co.uk/news/technology/rss.xml",
             "https://www.theregister.com/headlines.atom",
+            "https://rss.golem.de/rss.php?feed=RSS2.0",
+            "https://rss.golem.de/rss.php?feed=RSS2.0&ms=internet",
         ],
         "science": [
             "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
@@ -103,8 +105,11 @@ CATEGORY_FEEDS: Dict[str, Dict[str, List[str]]] = {
             "https://www.tagesschau.de/sport/index~rss2.xml",
         ],
         "it": [
-            "https://www.heise.de/rss/heise-atom.xml",
-            "https://www.tagesschau.de/inland/index~rss2.xml",
+            "https://www.heise.de/rss/heise-Rubrik-IT-atom.xml",
+            "https://www.heise.de/security/feed.xml",
+            "https://rss.golem.de/rss.php?feed=RSS2.0&ms=internet",
+            "https://rss.golem.de/rss.php?feed=RSS2.0&ms=security",
+            "https://rss.golem.de/rss.php?feed=RSS2.0",
         ],
         "science": [
             "https://www.tagesschau.de/wissen/index~rss2.xml",
